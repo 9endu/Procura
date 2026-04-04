@@ -74,5 +74,5 @@ Procura was heavily inspired by modern dev-tooling / B2B SaaS aesthetics (e.g., 
 ---
 
 <div align="center">
-  <p>🛠 Built by Nayanendu for the MCA 2025 Project</p>
+  <p>🛠 Built by Nayanendu,Parvathy KR,Padmapriya MS</p>
 </div>
