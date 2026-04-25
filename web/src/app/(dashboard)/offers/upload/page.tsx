@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCreatePool } from "@/services/poolService";
 import {
   ArrowLeft,
   Link2,
@@ -145,6 +147,9 @@ export default function OfferUploadPage() {
   const [showDuplicateNotice, setShowDuplicateNotice] = useState(true);
   const [showSimilarPools, setShowSimilarPools] = useState(true);
 
+  const router = useRouter();
+  const createPoolMutation = useCreatePool();
+
   // Input state
   const [urlValue, setUrlValue] = useState("");
   const [textValue, setTextValue] = useState("");
@@ -200,9 +205,37 @@ export default function OfferUploadPage() {
 
   const handlePublish = async () => {
     setPublishing(true);
-    await new Promise((r) => setTimeout(r, 1800));
-    setPublishing(false);
-    // In real app: redirect
+    
+    try {
+      // Parse numerical values to avoid API validation errors
+      const priceVal = parseFloat(editValues.price?.replace(/[^0-9.]/g, '') || '100');
+      const moqVal = parseInt(editValues.moq?.replace(/[^0-9]/g, '') || '50', 10);
+      
+      const payload = {
+        name: editValues.productName || "New Pool Item",
+        description: `${editValues.brand || ''} ${editValues.packSize || ''} from ${editValues.supplierName || 'Unknown Supplier'}`,
+        category: editValues.category || "General",
+        mrp: priceVal > 0 ? priceVal * 1.3 : 130, // Mock MRP 30% higher than pool price
+        poolPrice: priceVal,
+        targetUnits: moqVal,
+        expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+        minOrder: 5,
+        tags: [editValues.offerType].filter(Boolean),
+        creator_desired_quantity: Math.max(5, Math.floor(moqVal * 0.1))
+      };
+
+      const newPool = await createPoolMutation.mutateAsync(payload);
+      
+      // Redirect to the newly minted pool detail page
+      if (newPool && newPool.id) {
+        router.push(`/pools/${newPool.id}`);
+      } else {
+        setPublishing(false);
+      }
+    } catch (error) {
+      console.error("Failed to publish pool:", error);
+      setPublishing(false);
+    }
   };
 
   const handleFileDrop = (e: React.DragEvent) => {

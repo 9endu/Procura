@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Clock, Users, Package, Search, Filter, ArrowUpRight } from "lucide-react";
-import { mockPools } from "@/data/mockData";
+import { usePools } from "@/services/poolService";
 import { Card } from "@/components/ui/card";
 import { PoolProgress } from "@/components/ui/progress";
 import { Badge, StatusBadge } from "@/components/ui/badge";
@@ -15,11 +15,21 @@ export default function PoolsPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("Most Popular");
 
-  const filtered = mockPools.filter(
+  const { data: pools = [], isLoading, isError } = usePools();
+
+  const filtered = pools.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.category.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (isLoading) {
+    return <div className="text-zinc-500 py-10 text-center animate-pulse font-medium">Loading AI-matched pools...</div>;
+  }
+
+  if (isError) {
+    return <div className="text-red-500 py-10 text-center font-medium">Failed to load pools. Please try again.</div>;
+  }
 
   return (
     <div className="space-y-6 pb-8">
@@ -28,7 +38,7 @@ export default function PoolsPage() {
         <div>
           <h1 className="text-2xl font-black text-white">Buying Pools</h1>
           <p className="text-zinc-500 mt-1 text-sm">
-            {mockPools.length} active pools · Join to unlock wholesale prices
+            {pools.length} active pools · Join to unlock wholesale prices
           </p>
         </div>
         <Link href="/offers/upload">

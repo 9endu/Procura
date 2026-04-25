@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePool } from "@/services/poolService";
+import { useJoinRequests, useVoteJoinRequest } from "@/services/joinRequestService";
 import {
   ArrowLeft,
   Package,
@@ -335,7 +338,11 @@ function OTPCard({ title, otp, revealed, onToggle, status, icon: Icon }: {
    MAIN PAGE COMPONENT
    ═══════════════════════════════════════════════════════════ */
 
-export default function PoolDetailPage() {
+export default function PoolDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  // Unwrap params using React.use()
+  const unwrappedParams = use(params);
+  const id = unwrappedParams.id;
+  
   const [showPickupOTP, setShowPickupOTP] = useState(false);
   const [showDeliveryOTP, setShowDeliveryOTP] = useState(false);
   const [joinQty, setJoinQty] = useState(10);
@@ -348,7 +355,21 @@ export default function PoolDetailPage() {
     jr2: "approve",
   });
 
+  const { data: apiPendingRequests = [] } = useJoinRequests(id);
+  const voteMutation = useVoteJoinRequest();
+
+  // Prefer API data, but fallback to mock data if empty (for demo purposes)
+  const pendingRequests = apiPendingRequests.length > 0 ? apiPendingRequests : PENDING_REQUESTS;
+
   const handleVote = (requestId: string, vote: "approve" | "reject") => {
+    if (requestId.startsWith('jr')) {
+      // Mock local state update
+      setVotes((prev) => ({ ...prev, [requestId]: prev[requestId] === vote ? null : vote }));
+      return;
+    }
+    
+    // Remote API Mutation
+    voteMutation.mutate({ requestId, approved: vote === "approve" });
     setVotes((prev) => ({ ...prev, [requestId]: prev[requestId] === vote ? null : vote }));
   };
 
@@ -357,7 +378,19 @@ export default function PoolDetailPage() {
     setTimeout(() => setShowJoinForm(false), 200);
   };
 
-  const pool = POOL;
+  const { data: apiPool, isLoading } = usePool(id);
+
+  // Merge the real API pool with mock data for fields the API doesn't support yet
+  const pool = apiPool ? { ...POOL, ...apiPool } : POOL;
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center p-20 space-y-4">
+        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+        <p className="text-zinc-500 text-sm animate-pulse">Loading pool details...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -599,16 +632,19 @@ export default function PoolDetailPage() {
                     Members vote to approve or reject • 75% threshold needed
                   </p>
                 </div>
-                <Badge variant="warning" size="sm" className="ml-auto">{PENDING_REQUESTS.length} pending</Badge>
+                <Badge variant="warning" size="sm" className="ml-auto">{pendingRequests.length} pending</Badge>
               </div>
             </div>
 
             <div className="p-5 space-y-4">
-              {PENDING_REQUESTS.map((req) => {
-                const approvalPct = Math.round((req.approvals / req.totalVoters) * 100);
-                const rejectionPct = Math.round((req.rejections / req.totalVoters) * 100);
+              {pendingRequests.map((req: any) => {
+                const approvalPct = req.total_voters ? Math.round((req.approvals / req.total_voters) * 100) : Math.round((req.approvals / (req.totalVoters || 1)) * 100);
+                const rejectionPct = req.total_voters ? Math.round((req.rejections / req.total_voters) * 100) : Math.round((req.rejections / (req.totalVoters || 1)) * 100);
                 const currentVote = votes[req.id];
-                const meetsThreshold = approvalPct >= req.threshold;
+                const threshold = req.threshold_percentage || req.threshold || 75;
+                const meetsThreshold = approvalPct >= threshold;
+                const totalVoters = req.total_voters || req.totalVoters || 8;
+                const requestedQty = req.requested_quantity || req.requestedQty;
 
                 return (
                   <div key={req.id} className="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden">
@@ -623,7 +659,7 @@ export default function PoolDetailPage() {
                             <span className="text-[10px] text-zinc-500">• {req.previousPools} past pools</span>
                           </div>
                           <p className="text-xs text-zinc-400 mt-1">
-                            Wants to join with <span className="text-white font-semibold">{req.requestedQty} units</span>
+                            Wants to join with <span className="text-white font-semibold">{requestedQty} units</span>
                             <span className="text-zinc-600 ml-2">• Requested {req.requestedAt}</span>
                           </p>
                         </div>
@@ -644,7 +680,7 @@ export default function PoolDetailPage() {
                       <div className="mt-4">
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-xs text-zinc-400">
-                            Approval Progress: <span className="text-white font-semibold">{req.approvals}/{req.totalVoters}</span> approved
+                            Approval Progress: <span className="text-white font-semibold">{req.approvals}/{totalVoters}</span> approved
                             <span className="text-zinc-600 ml-1">({approvalPct}%)</span>
                           </span>
                           <span className={cn(
@@ -653,7 +689,7 @@ export default function PoolDetailPage() {
                               ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                               : "text-zinc-500 bg-zinc-800 border-zinc-700"
                           )}>
-                            {meetsThreshold ? "Threshold Met ✓" : `${req.threshold}% needed`}
+                            {meetsThreshold ? "Threshold Met ✓" : `${threshold}% needed`}
                           </span>
                         </div>
                         <div className="h-2 bg-zinc-800 rounded-full overflow-hidden flex">
@@ -669,7 +705,7 @@ export default function PoolDetailPage() {
                         <div className="flex items-center gap-4 mt-1.5 text-[10px]">
                           <span className="text-emerald-400">{req.approvals} approved</span>
                           <span className="text-rose-400">{req.rejections} rejected</span>
-                          <span className="text-zinc-600">{req.totalVoters - req.approvals - req.rejections} pending</span>
+                          <span className="text-zinc-600">{totalVoters - req.approvals - req.rejections} pending</span>
                         </div>
                       </div>
                     </div>
@@ -679,6 +715,7 @@ export default function PoolDetailPage() {
                       <span className="text-[10px] text-zinc-500 mr-2">Your vote:</span>
                       <button
                         onClick={() => handleVote(req.id, "approve")}
+                        disabled={voteMutation.isPending}
                         className={cn(
                           "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all border",
                           currentVote === "approve"
@@ -692,6 +729,7 @@ export default function PoolDetailPage() {
                       </button>
                       <button
                         onClick={() => handleVote(req.id, "reject")}
+                        disabled={voteMutation.isPending}
                         className={cn(
                           "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all border",
                           currentVote === "reject"
