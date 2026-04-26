@@ -10,6 +10,7 @@ class OfferBase(TimeStampModel):
     normalized_product_id: uuid.UUID = Field(foreign_key="normalized_products.id", index=True)
     title: str = Field(index=True)
     seller_id: uuid.UUID = Field(foreign_key="users.id", index=True)
+    seller_name: str = Field(default="")   # Human-readable display name (denormalised)
     category: str
     unitPrice: float
     bulkPrice: float
